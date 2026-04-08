@@ -1,110 +1,95 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner OCR Simple</title>
+    <title>Scanner OCR Enfocado</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         body {
-            font-family: sans-serif;
+            font-family: -apple-system, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
-            background: #f0f2f5;
+            background: #121212; /* Fondo oscuro para que resalte el visor */
+            color: white;
             margin: 0;
             padding: 20px;
         }
 
-        #video-container {
+        /* Contenedor que hace el recorte (visor) */
+        #scanner-visor {
             position: relative;
-            width: 100%;
-            max-width: 500px;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            width: 300px;  /* Ancho del rectángulo */
+            height: 100px; /* Alto del rectángulo */
+            border: 3px solid #00ff00;
+            border-radius: 12px;
+            overflow: hidden; /* Esto oculta el resto de la cámara */
+            background: black;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
         }
 
         video {
-            width: 100%;
-            display: block;
-        }
-
-        #overlay {
             position: absolute;
+            /* Centramos el video dentro del visor */
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            border: 2px solid #00ff00;
-            width: 80%;
-            height: 60px;
-            pointer-events: none;
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+            min-width: 100%;
+            min-height: 100%;
         }
 
-        .controls {
-            margin: 20px 0;
-        }
+        .controls { margin: 25px 0; }
 
         #status {
-            color: #555;
-            font-size: 0.9em;
+            color: #aaa;
+            font-size: 0.85em;
             margin-bottom: 10px;
+            text-align: center;
         }
 
         .list-container {
             width: 100%;
-            max-width: 500px;
-            background: white;
+            max-width: 350px;
+            background: #1e1e1e;
             padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
         }
 
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-
+        ul { list-style: none; padding: 0; margin: 0; }
         li {
-            padding: 8px;
-            border-bottom: 1px solid #eee;
-            font-family: monospace;
-            color: #333;
-        }
-
-        li:last-child {
-            border-bottom: none;
+            padding: 10px;
+            border-bottom: 1px solid #333;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            justify-content: space-between;
         }
 
         button {
-            padding: 10px 20px;
+            padding: 12px 25px;
             background: #007bff;
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
+            font-weight: bold;
             cursor: pointer;
         }
     </style>
 </head>
-
 <body>
 
-    <h2>Escáner de Formatos</h2>
-    <p id="status">Cargando cámara...</p>
+    <h3>Escáner de Números</h3>
+    <p id="status">Iniciando cámara...</p>
 
-    <div id="video-container">
+    <div id="scanner-visor">
         <video id="video" autoplay playsinline></video>
-        <div id="overlay"></div>
     </div>
 
     <div class="controls">
-        <button id="start-btn">Iniciar Escaneo</button>
+        <button id="start-btn">Cargando...</button>
     </div>
 
     <div class="list-container">
-        <strong>Detectados:</strong>
         <ul id="results-list"></ul>
     </div>
 
@@ -121,64 +106,73 @@
         let isScanning = false;
 
         async function setupCamera() {
-            const constraints = {
-                video: {
-                    facingMode: "environment", // Fuerza la cámara trasera
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                }
-            };
             try {
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment", width: 1280, height: 720 }
+                });
                 video.srcObject = stream;
-                status.innerText = "Cámara lista. Enfoca el número.";
+                startBtn.innerText = "Iniciar Escaneo";
+                status.innerText = "Listo para escanear";
             } catch (err) {
-                status.innerText = "Error: Asegúrate de dar permisos de cámara y usar HTTPS.";
+                status.innerText = "Error: Acceso denegado a la cámara.";
             }
         }
 
         async function scanFrame() {
             if (!isScanning) return;
 
-            const context = canvas.getContext('2d');
-            // Reducimos el área de escaneo al centro para mejorar velocidad en móvil
-            canvas.width = 640;
-            canvas.height = 480;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const ctx = canvas.getContext('2d', { alpha: false });
+            
+            // Definimos el área de recorte (el centro del video)
+            // Esto mejora mucho la velocidad porque el OCR solo lee una imagen pequeña
+            const scanW = 400; 
+            const scanH = 150;
+            const startX = (video.videoWidth / 2) - (scanW / 2);
+            const startY = (video.videoHeight / 2) - (scanH / 2);
 
-            // Usamos Tesseract con una configuración más ligera
-            const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
+            canvas.width = scanW;
+            canvas.height = scanH;
 
-            // El formato que pediste
-            const regex = /(00111|00008)-\d{8}/g;
-            const matches = text.match(regex);
+            // Dibujamos solo el pedazo central del video en el canvas
+            ctx.drawImage(video, startX, startY, scanW, scanH, 0, 0, scanW, scanH);
 
-            if (matches) {
-                matches.forEach(match => {
-                    if (!detectedValues.has(match)) {
-                        detectedValues.add(match);
-                        const li = document.createElement('li');
-                        li.innerHTML = `<b>${match}</b> <small>(${new Date().toLocaleTimeString()})</small>`;
-                        list.prepend(li);
+            try {
+                const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
+                const regex = /(00111|00008)-\d{8}/g;
+                const matches = text.match(regex);
 
-                        // Vibración de éxito (solo Android)
-                        if (navigator.vibrate) navigator.vibrate(100);
-                    }
-                });
+                if (matches) {
+                    matches.forEach(match => {
+                        if (!detectedValues.has(match)) {
+                            detectedValues.add(match);
+                            const li = document.createElement('li');
+                            li.innerHTML = `<span>${match}</span> <small>${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</small>`;
+                            list.prepend(li);
+                            if (navigator.vibrate) navigator.vibrate(70);
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error(e);
             }
-            // Escaneo cada 1 segundo en móvil para no sobrecalentar
-            setTimeout(scanFrame, 1000);
+
+            // Intervalo rápido: cada 600ms para que se sienta ágil
+            setTimeout(scanFrame, 600);
         }
 
         startBtn.addEventListener('click', () => {
             isScanning = !isScanning;
             startBtn.innerText = isScanning ? "Detener" : "Iniciar Escaneo";
             startBtn.style.background = isScanning ? "#ff4444" : "#007bff";
-            if (isScanning) scanFrame();
+            if (isScanning) {
+                status.innerText = "Buscando números...";
+                scanFrame();
+            } else {
+                status.innerText = "Escaneo pausado";
+            }
         });
 
         setupCamera();
     </script>
 </body>
-
 </html>
