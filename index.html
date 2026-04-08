@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner OCR Enfocado</title>
+    <title>Scanner Pro - Solo Números</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         body {
@@ -11,27 +11,27 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            background: #121212; /* Fondo oscuro para que resalte el visor */
+            background: #121212;
             color: white;
             margin: 0;
             padding: 20px;
         }
 
-        /* Contenedor que hace el recorte (visor) */
+        /* Visor de escaneo recortado */
         #scanner-visor {
             position: relative;
-            width: 300px;  /* Ancho del rectángulo */
-            height: 100px; /* Alto del rectángulo */
+            width: 300px; 
+            height: 100px;
             border: 3px solid #00ff00;
             border-radius: 12px;
-            overflow: hidden; /* Esto oculta el resto de la cámara */
+            overflow: hidden;
             background: black;
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+            margin-top: 10px;
         }
 
         video {
             position: absolute;
-            /* Centramos el video dentro del visor */
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
@@ -39,54 +39,68 @@
             min-height: 100%;
         }
 
-        .controls { margin: 25px 0; }
+        .controls { 
+            margin: 20px 0; 
+            display: flex; 
+            gap: 10px; 
+            flex-wrap: wrap;
+            justify-content: center;
+        }
 
         #status {
             color: #aaa;
             font-size: 0.85em;
             margin-bottom: 10px;
-            text-align: center;
         }
 
         .list-container {
             width: 100%;
-            max-width: 350px;
+            max-width: 320px;
             background: #1e1e1e;
-            padding: 15px;
+            padding: 10px;
             border-radius: 12px;
+            max-height: 300px;
+            overflow-y: auto;
         }
 
         ul { list-style: none; padding: 0; margin: 0; }
         li {
-            padding: 10px;
+            padding: 12px;
             border-bottom: 1px solid #333;
             font-family: 'Courier New', monospace;
-            display: flex;
-            justify-content: space-between;
+            font-size: 1.1em;
+            text-align: center;
+            letter-spacing: 1px;
         }
 
         button {
-            padding: 12px 25px;
-            background: #007bff;
-            color: white;
+            padding: 12px 20px;
             border: none;
             border-radius: 8px;
             font-weight: bold;
             cursor: pointer;
+            font-size: 0.9em;
         }
+
+        #start-btn { background: #007bff; color: white; }
+        #copy-btn { background: #444; color: white; }
+        
+        /* Efecto de copiado con éxito */
+        .copied { background: #28a745 !important; }
     </style>
 </head>
 <body>
 
     <h3>Escáner de Números</h3>
-    <p id="status">Iniciando cámara...</p>
+    <p id="status">Cargando...</p>
 
     <div id="scanner-visor">
         <video id="video" autoplay playsinline></video>
     </div>
 
     <div class="controls">
-        <button id="start-btn">Cargando...</button>
+        <button id="start-btn">Iniciar Escaneo</button>
+        <button id="copy-btn">Copiar Lista</button>
     </div>
 
     <div class="list-container">
@@ -98,9 +112,10 @@
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
-        const list = document.getElementById('results-list');
+        const listUI = document.getElementById('results-list');
         const status = document.getElementById('status');
         const startBtn = document.getElementById('start-btn');
+        const copyBtn = document.getElementById('copy-btn');
 
         const detectedValues = new Set();
         let isScanning = false;
@@ -111,10 +126,9 @@
                     video: { facingMode: "environment", width: 1280, height: 720 }
                 });
                 video.srcObject = stream;
-                startBtn.innerText = "Iniciar Escaneo";
-                status.innerText = "Listo para escanear";
+                status.innerText = "Listo";
             } catch (err) {
-                status.innerText = "Error: Acceso denegado a la cámara.";
+                status.innerText = "Error: Sin acceso a cámara.";
             }
         }
 
@@ -123,9 +137,8 @@
 
             const ctx = canvas.getContext('2d', { alpha: false });
             
-            // Definimos el área de recorte (el centro del video)
-            // Esto mejora mucho la velocidad porque el OCR solo lee una imagen pequeña
-            const scanW = 400; 
+            // Área de recorte para OCR (centro del video)
+            const scanW = 450; 
             const scanH = 150;
             const startX = (video.videoWidth / 2) - (scanW / 2);
             const startY = (video.videoHeight / 2) - (scanH / 2);
@@ -133,7 +146,6 @@
             canvas.width = scanW;
             canvas.height = scanH;
 
-            // Dibujamos solo el pedazo central del video en el canvas
             ctx.drawImage(video, startX, startY, scanW, scanH, 0, 0, scanW, scanH);
 
             try {
@@ -145,30 +157,57 @@
                     matches.forEach(match => {
                         if (!detectedValues.has(match)) {
                             detectedValues.add(match);
+                            
+                            // Añadir a la lista visual (solo el número)
                             const li = document.createElement('li');
-                            li.innerHTML = `<span>${match}</span> <small>${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</small>`;
-                            list.prepend(li);
-                            if (navigator.vibrate) navigator.vibrate(70);
+                            li.textContent = match;
+                            listUI.prepend(li);
+                            
+                            if (navigator.vibrate) navigator.vibrate(50);
                         }
                     });
                 }
-            } catch (e) {
-                console.error(e);
+            } catch (e) { console.error(e); }
+
+            setTimeout(scanFrame, 700);
+        }
+
+        // Función para copiar al portapapeles
+        copyBtn.addEventListener('click', async () => {
+            if (detectedValues.size === 0) {
+                alert("La lista está vacía");
+                return;
             }
 
-            // Intervalo rápido: cada 600ms para que se sienta ágil
-            setTimeout(scanFrame, 600);
-        }
+            // Convertir el Set a texto separado por saltos de línea
+            const textToCopy = Array.from(detectedValues).join('\n');
+
+            try {
+                await navigator.clipboard.writeText(textToCopy);
+                
+                // Feedback visual en el botón
+                const originalText = copyBtn.innerText;
+                copyBtn.innerText = "¡Copiado!";
+                copyBtn.classList.add('copied');
+                
+                setTimeout(() => {
+                    copyBtn.innerText = originalText;
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            } catch (err) {
+                alert("Error al copiar: " + err);
+            }
+        });
 
         startBtn.addEventListener('click', () => {
             isScanning = !isScanning;
             startBtn.innerText = isScanning ? "Detener" : "Iniciar Escaneo";
             startBtn.style.background = isScanning ? "#ff4444" : "#007bff";
             if (isScanning) {
-                status.innerText = "Buscando números...";
+                status.innerText = "Escaneando...";
                 scanFrame();
             } else {
-                status.innerText = "Escaneo pausado";
+                status.innerText = "Pausado";
             }
         });
 
