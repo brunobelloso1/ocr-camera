@@ -1,69 +1,184 @@
-<script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const list = document.getElementById('results-list');
-    const status = document.getElementById('status');
-    const startBtn = document.getElementById('start-btn');
-    
-    const detectedValues = new Set();
-    let isScanning = false;
+<!DOCTYPE html>
+<html lang="es">
 
-    async function setupCamera() {
-        const constraints = { 
-            video: { 
-                facingMode: "environment", // Fuerza la cámara trasera
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            } 
-        };
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            video.srcObject = stream;
-            status.innerText = "Cámara lista. Enfoca el número.";
-        } catch (err) {
-            status.innerText = "Error: Asegúrate de dar permisos de cámara y usar HTTPS.";
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner OCR Simple</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #f0f2f5;
+            margin: 0;
+            padding: 20px;
         }
-    }
 
-    async function scanFrame() {
-        if (!isScanning) return;
+        #video-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
 
-        const context = canvas.getContext('2d');
-        // Reducimos el área de escaneo al centro para mejorar velocidad en móvil
-        canvas.width = 640; 
-        canvas.height = 480;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        video {
+            width: 100%;
+            display: block;
+        }
 
-        // Usamos Tesseract con una configuración más ligera
-        const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
-        
-        // El formato que pediste
-        const regex = /(00111|00008)-\d{8}/g;
-        const matches = text.match(regex);
+        #overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid #00ff00;
+            width: 80%;
+            height: 60px;
+            pointer-events: none;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+        }
 
-        if (matches) {
-            matches.forEach(match => {
-                if (!detectedValues.has(match)) {
-                    detectedValues.add(match);
-                    const li = document.createElement('li');
-                    li.innerHTML = `<b>${match}</b> <small>(${new Date().toLocaleTimeString()})</small>`;
-                    list.prepend(li);
-                    
-                    // Vibración de éxito (solo Android)
-                    if (navigator.vibrate) navigator.vibrate(100);
+        .controls {
+            margin: 20px 0;
+        }
+
+        #status {
+            color: #555;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+
+        .list-container {
+            width: 100%;
+            max-width: 500px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        li {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            font-family: monospace;
+            color: #333;
+        }
+
+        li:last-child {
+            border-bottom: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Escáner de Formatos</h2>
+    <p id="status">Cargando cámara...</p>
+
+    <div id="video-container">
+        <video id="video" autoplay playsinline></video>
+        <div id="overlay"></div>
+    </div>
+
+    <div class="controls">
+        <button id="start-btn">Iniciar Escaneo</button>
+    </div>
+
+    <div class="list-container">
+        <strong>Detectados:</strong>
+        <ul id="results-list"></ul>
+    </div>
+
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const list = document.getElementById('results-list');
+        const status = document.getElementById('status');
+        const startBtn = document.getElementById('start-btn');
+
+        const detectedValues = new Set();
+        let isScanning = false;
+
+        async function setupCamera() {
+            const constraints = {
+                video: {
+                    facingMode: "environment", // Fuerza la cámara trasera
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
                 }
-            });
+            };
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                status.innerText = "Cámara lista. Enfoca el número.";
+            } catch (err) {
+                status.innerText = "Error: Asegúrate de dar permisos de cámara y usar HTTPS.";
+            }
         }
-        // Escaneo cada 1 segundo en móvil para no sobrecalentar
-        setTimeout(scanFrame, 1000);
-    }
 
-    startBtn.addEventListener('click', () => {
-        isScanning = !isScanning;
-        startBtn.innerText = isScanning ? "Detener" : "Iniciar Escaneo";
-        startBtn.style.background = isScanning ? "#ff4444" : "#007bff";
-        if(isScanning) scanFrame();
-    });
+        async function scanFrame() {
+            if (!isScanning) return;
 
-    setupCamera();
-</script>
+            const context = canvas.getContext('2d');
+            // Reducimos el área de escaneo al centro para mejorar velocidad en móvil
+            canvas.width = 640;
+            canvas.height = 480;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Usamos Tesseract con una configuración más ligera
+            const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
+
+            // El formato que pediste
+            const regex = /(00111|00008)-\d{8}/g;
+            const matches = text.match(regex);
+
+            if (matches) {
+                matches.forEach(match => {
+                    if (!detectedValues.has(match)) {
+                        detectedValues.add(match);
+                        const li = document.createElement('li');
+                        li.innerHTML = `<b>${match}</b> <small>(${new Date().toLocaleTimeString()})</small>`;
+                        list.prepend(li);
+
+                        // Vibración de éxito (solo Android)
+                        if (navigator.vibrate) navigator.vibrate(100);
+                    }
+                });
+            }
+            // Escaneo cada 1 segundo en móvil para no sobrecalentar
+            setTimeout(scanFrame, 1000);
+        }
+
+        startBtn.addEventListener('click', () => {
+            isScanning = !isScanning;
+            startBtn.innerText = isScanning ? "Detener" : "Iniciar Escaneo";
+            startBtn.style.background = isScanning ? "#ff4444" : "#007bff";
+            if (isScanning) scanFrame();
+        });
+
+        setupCamera();
+    </script>
+</body>
+
+</html>
