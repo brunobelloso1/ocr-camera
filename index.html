@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Scanner Pro - Solo Números</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
@@ -15,6 +15,8 @@
             color: white;
             margin: 0;
             padding: 20px;
+            /* Evita el zoom por doble toque en toda la página */
+            touch-action: manipulation;
         }
 
         /* Visor de escaneo recortado */
@@ -28,6 +30,8 @@
             background: black;
             box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
             margin-top: 10px;
+            /* Desactiva gestos sobre el visor para evitar conflictos */
+            touch-action: none;
         }
 
         video {
@@ -80,6 +84,8 @@
             font-weight: bold;
             cursor: pointer;
             font-size: 0.9em;
+            /* Evita el retraso del clic y el zoom en botones */
+            touch-action: manipulation;
         }
 
         #start-btn { background: #007bff; color: white; }
@@ -137,7 +143,6 @@
 
             const ctx = canvas.getContext('2d', { alpha: false });
             
-            // Área de recorte para OCR (centro del video)
             const scanW = 450; 
             const scanH = 150;
             const startX = (video.videoWidth / 2) - (scanW / 2);
@@ -158,7 +163,6 @@
                         if (!detectedValues.has(match)) {
                             detectedValues.add(match);
                             
-                            // Añadir a la lista visual (solo el número)
                             const li = document.createElement('li');
                             li.textContent = match;
                             listUI.prepend(li);
@@ -172,20 +176,17 @@
             setTimeout(scanFrame, 700);
         }
 
-        // Función para copiar al portapapeles
         copyBtn.addEventListener('click', async () => {
             if (detectedValues.size === 0) {
                 alert("La lista está vacía");
                 return;
             }
 
-            // Convertir el Set a texto separado por saltos de línea
             const textToCopy = Array.from(detectedValues).join('\n');
 
             try {
                 await navigator.clipboard.writeText(textToCopy);
                 
-                // Feedback visual en el botón
                 const originalText = copyBtn.innerText;
                 copyBtn.innerText = "¡Copiado!";
                 copyBtn.classList.add('copied');
