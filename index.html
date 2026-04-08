@@ -1,0 +1,69 @@
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const list = document.getElementById('results-list');
+    const status = document.getElementById('status');
+    const startBtn = document.getElementById('start-btn');
+    
+    const detectedValues = new Set();
+    let isScanning = false;
+
+    async function setupCamera() {
+        const constraints = { 
+            video: { 
+                facingMode: "environment", // Fuerza la cámara trasera
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            } 
+        };
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+            status.innerText = "Cámara lista. Enfoca el número.";
+        } catch (err) {
+            status.innerText = "Error: Asegúrate de dar permisos de cámara y usar HTTPS.";
+        }
+    }
+
+    async function scanFrame() {
+        if (!isScanning) return;
+
+        const context = canvas.getContext('2d');
+        // Reducimos el área de escaneo al centro para mejorar velocidad en móvil
+        canvas.width = 640; 
+        canvas.height = 480;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Usamos Tesseract con una configuración más ligera
+        const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
+        
+        // El formato que pediste
+        const regex = /(00111|00008)-\d{8}/g;
+        const matches = text.match(regex);
+
+        if (matches) {
+            matches.forEach(match => {
+                if (!detectedValues.has(match)) {
+                    detectedValues.add(match);
+                    const li = document.createElement('li');
+                    li.innerHTML = `<b>${match}</b> <small>(${new Date().toLocaleTimeString()})</small>`;
+                    list.prepend(li);
+                    
+                    // Vibración de éxito (solo Android)
+                    if (navigator.vibrate) navigator.vibrate(100);
+                }
+            });
+        }
+        // Escaneo cada 1 segundo en móvil para no sobrecalentar
+        setTimeout(scanFrame, 1000);
+    }
+
+    startBtn.addEventListener('click', () => {
+        isScanning = !isScanning;
+        startBtn.innerText = isScanning ? "Detener" : "Iniciar Escaneo";
+        startBtn.style.background = isScanning ? "#ff4444" : "#007bff";
+        if(isScanning) scanFrame();
+    });
+
+    setupCamera();
+</script>
