@@ -15,11 +15,9 @@
             color: white;
             margin: 0;
             padding: 20px;
-            /* Evita el zoom por doble toque en toda la página */
             touch-action: manipulation;
         }
 
-        /* Visor de escaneo recortado */
         #scanner-visor {
             position: relative;
             width: 300px; 
@@ -30,7 +28,6 @@
             background: black;
             box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
             margin-top: 10px;
-            /* Desactiva gestos sobre el visor para evitar conflictos */
             touch-action: none;
         }
 
@@ -63,7 +60,7 @@
             background: #1e1e1e;
             padding: 10px;
             border-radius: 12px;
-            max-height: 300px;
+            max-height: 250px;
             overflow-y: auto;
         }
 
@@ -84,14 +81,13 @@
             font-weight: bold;
             cursor: pointer;
             font-size: 0.9em;
-            /* Evita el retraso del clic y el zoom en botones */
             touch-action: manipulation;
         }
 
         #start-btn { background: #007bff; color: white; }
         #copy-btn { background: #444; color: white; }
+        #copy-fmt-btn { background: #f39c12; color: white; }
         
-        /* Efecto de copiado con éxito */
         .copied { background: #28a745 !important; }
     </style>
 </head>
@@ -106,7 +102,8 @@
 
     <div class="controls">
         <button id="start-btn">Iniciar Escaneo</button>
-        <button id="copy-btn">Copiar Lista</button>
+        <button id="copy-btn">Copiar Lista (Normal)</button>
+        <button id="copy-fmt-btn">Copiar Formateado</button>
     </div>
 
     <div class="list-container">
@@ -122,6 +119,7 @@
         const status = document.getElementById('status');
         const startBtn = document.getElementById('start-btn');
         const copyBtn = document.getElementById('copy-btn');
+        const copyFmtBtn = document.getElementById('copy-fmt-btn');
 
         const detectedValues = new Set();
         let isScanning = false;
@@ -142,7 +140,6 @@
             if (!isScanning) return;
 
             const ctx = canvas.getContext('2d', { alpha: false });
-            
             const scanW = 450; 
             const scanH = 150;
             const startX = (video.videoWidth / 2) - (scanW / 2);
@@ -150,7 +147,6 @@
 
             canvas.width = scanW;
             canvas.height = scanH;
-
             ctx.drawImage(video, startX, startY, scanW, scanH, 0, 0, scanW, scanH);
 
             try {
@@ -162,42 +158,52 @@
                     matches.forEach(match => {
                         if (!detectedValues.has(match)) {
                             detectedValues.add(match);
-                            
                             const li = document.createElement('li');
                             li.textContent = match;
                             listUI.prepend(li);
-                            
                             if (navigator.vibrate) navigator.vibrate(50);
                         }
                     });
                 }
             } catch (e) { console.error(e); }
-
             setTimeout(scanFrame, 700);
         }
 
-        copyBtn.addEventListener('click', async () => {
-            if (detectedValues.size === 0) {
-                alert("La lista está vacía");
-                return;
-            }
-
-            const textToCopy = Array.from(detectedValues).join('\n');
-
+        // Función auxiliar para copiar y animar botón
+        async function copyToClipboard(text, button) {
             try {
-                await navigator.clipboard.writeText(textToCopy);
-                
-                const originalText = copyBtn.innerText;
-                copyBtn.innerText = "¡Copiado!";
-                copyBtn.classList.add('copied');
-                
+                await navigator.clipboard.writeText(text);
+                const originalText = button.innerText;
+                button.innerText = "¡Copiado!";
+                button.classList.add('copied');
                 setTimeout(() => {
-                    copyBtn.innerText = originalText;
-                    copyBtn.classList.remove('copied');
+                    button.innerText = originalText;
+                    button.classList.remove('copied');
                 }, 2000);
             } catch (err) {
                 alert("Error al copiar: " + err);
             }
+        }
+
+        // COPIAR NORMAL (Lista con saltos de línea)
+        copyBtn.addEventListener('click', () => {
+            if (detectedValues.size === 0) return alert("Lista vacía");
+            const text = Array.from(detectedValues).join('\n');
+            copyToClipboard(text, copyBtn);
+        });
+
+        // COPIAR FORMATEADO (Ejemplo: 11100019321-11100019316)
+        copyFmtBtn.addEventListener('click', () => {
+            if (detectedValues.size === 0) return alert("Lista vacía");
+            
+            // Procesar cada número: quitar guion y luego ceros a la izquierda
+            const formattedArray = Array.from(detectedValues).map(val => {
+                return val.replace(/-/g, '').replace(/^0+/, '');
+            });
+
+            // Unir todos con un guion medio
+            const textToCopy = formattedArray.join('-');
+            copyToClipboard(textToCopy, copyFmtBtn);
         });
 
         startBtn.addEventListener('click', () => {
