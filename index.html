@@ -65,13 +65,17 @@
         }
 
         ul { list-style: none; padding: 0; margin: 0; }
+        
+        /* Modificado para alinear el texto y el botón de eliminar */
         li {
             padding: 12px;
             border-bottom: 1px solid #333;
             font-family: 'Courier New', monospace;
             font-size: 1.1em;
-            text-align: center;
             letter-spacing: 1px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         button {
@@ -87,8 +91,20 @@
         #start-btn { background: #007bff; color: white; }
         #copy-btn { background: #444; color: white; }
         #copy-fmt-btn { background: #f39c12; color: white; }
+        #undo-btn { background: #6c757d; color: white; } /* Botón deshacer */
+        
+        #undo-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
         .copied { background: #28a745 !important; }
+
+        /* Estilo para el botón de eliminar individual */
+        .delete-btn {
+            background: transparent;
+            color: #ff4444;
+            padding: 5px 10px;
+            margin: 0;
+            font-size: 1.2em;
+        }
     </style>
 </head>
 <body>
@@ -102,8 +118,9 @@
 
     <div class="controls">
         <button id="start-btn">Iniciar Escaneo</button>
-        <button id="copy-btn">Copiar Lista (Normal)</button>
+        <button id="copy-btn">Copiar (Normal)</button>
         <button id="copy-fmt-btn">Copiar Formateado</button>
+        <button id="undo-btn" disabled>Deshacer ↩</button>
     </div>
 
     <div class="list-container">
@@ -120,9 +137,13 @@
         const startBtn = document.getElementById('start-btn');
         const copyBtn = document.getElementById('copy-btn');
         const copyFmtBtn = document.getElementById('copy-fmt-btn');
+        const undoBtn = document.getElementById('undo-btn');
 
         const detectedValues = new Set();
         let isScanning = false;
+        
+        // Pila para guardar los elementos eliminados
+        const undoStack = [];
 
         async function setupCamera() {
             try {
@@ -134,6 +155,30 @@
             } catch (err) {
                 status.innerText = "Error: Sin acceso a cámara.";
             }
+        }
+
+        // Función para crear y renderizar un elemento en la lista
+        function renderItem(match) {
+            const li = document.createElement('li');
+            
+            const textSpan = document.createElement('span');
+            textSpan.textContent = match;
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.innerHTML = '✖';
+            deleteBtn.className = 'delete-btn';
+            
+            // Lógica de eliminación
+            deleteBtn.onclick = () => {
+                detectedValues.delete(match); // Quitar del set para no copiarlo
+                li.remove(); // Quitar del DOM
+                undoStack.push(match); // Guardar en el historial
+                undoBtn.disabled = false; // Habilitar botón deshacer
+            };
+
+            li.appendChild(textSpan);
+            li.appendChild(deleteBtn);
+            listUI.prepend(li);
         }
 
         async function scanFrame() {
@@ -158,9 +203,7 @@
                     matches.forEach(match => {
                         if (!detectedValues.has(match)) {
                             detectedValues.add(match);
-                            const li = document.createElement('li');
-                            li.textContent = match;
-                            listUI.prepend(li);
+                            renderItem(match); // Usamos la nueva función
                             if (navigator.vibrate) navigator.vibrate(50);
                         }
                     });
@@ -168,6 +211,20 @@
             } catch (e) { console.error(e); }
             setTimeout(scanFrame, 700);
         }
+
+        // Lógica del botón Deshacer
+        undoBtn.addEventListener('click', () => {
+            if (undoStack.length === 0) return;
+            
+            const lastDeleted = undoStack.pop(); // Sacar el último eliminado
+            detectedValues.add(lastDeleted); // Volver a añadirlo al Set
+            renderItem(lastDeleted); // Volver a mostrarlo en la UI
+
+            // Si ya no hay nada que deshacer, deshabilitar botón
+            if (undoStack.length === 0) {
+                undoBtn.disabled = true;
+            }
+        });
 
         // Función auxiliar para copiar y animar botón
         async function copyToClipboard(text, button) {
@@ -185,23 +242,21 @@
             }
         }
 
-        // COPIAR NORMAL (Lista con saltos de línea)
+        // COPIAR NORMAL
         copyBtn.addEventListener('click', () => {
             if (detectedValues.size === 0) return alert("Lista vacía");
             const text = Array.from(detectedValues).join('\n');
             copyToClipboard(text, copyBtn);
         });
 
-        // COPIAR FORMATEADO (Ejemplo: 11100019321-11100019316)
+        // COPIAR FORMATEADO
         copyFmtBtn.addEventListener('click', () => {
             if (detectedValues.size === 0) return alert("Lista vacía");
             
-            // Procesar cada número: quitar guion y luego ceros a la izquierda
             const formattedArray = Array.from(detectedValues).map(val => {
                 return val.replace(/-/g, '').replace(/^0+/, '');
             });
 
-            // Unir todos con un guion medio
             const textToCopy = formattedArray.join('-');
             copyToClipboard(textToCopy, copyFmtBtn);
         });
